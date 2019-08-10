@@ -49,14 +49,15 @@ class RNTN:
                 start = time.time()
                 self.optimizer.optimize(trees)
                 end = time.time()
-                print("   Time per epoch = {:.4f}".format(end-start))
+                print("   Time per epoch = {:.4f}".format(end - start))
 
                 # Save the model
                 self.save(export_filename)
 
                 # Test the model on train and test set
                 train_cost, train_result = self.test(trees)
-                train_accuracy = 100.0 * train_result.trace() / train_result.sum()
+                train_accuracy = \
+                    100.0 * train_result.trace() / train_result.sum()
                 test_cost, test_result = self.test(test_trees)
                 test_accuracy = 100.0 * test_result.trace() / test_result.sum()
 
@@ -78,7 +79,8 @@ class RNTN:
             # output = word vector
             try:
                 tree.vector = self.L[:, self.word_map[tree[0]]]
-            except:
+            except Exception as e:
+                print("Exception: {}".format(e))
                 tree.vector = self.L[:, self.word_map[tr.UNK]]
         else:
             # calculate output of child nodes
@@ -119,9 +121,13 @@ class RNTN:
             max_epochs = pickle.load(f)
             stack = pickle.load(f)
             model = RNTN(dim=dim, output_dim=output_dim, batch_size=batch_size,
-                         reg=reg, learning_rate=learning_rate, max_epochs=max_epochs)
+                         reg=reg, learning_rate=learning_rate,
+                         max_epochs=max_epochs)
+
             model.stack = stack
-            model.L, model.V, model.W, model.b, model.Ws, model.bs = model.stack
+            model.L, model.V, model.W, model.b, model.Ws, model.bs = \
+                model.stack
+
             model.word_map = pickle.load(f)
             return model
 
@@ -132,8 +138,8 @@ class RNTN:
         self.L = 0.01 * np.random.randn(self.dim, self.num_words)
 
         # RNTN parameters
-        self.V = 0.01 * np.random.randn(self.dim, 2*self.dim, 2*self.dim)
-        self.W = 0.01 * np.random.randn(self.dim, 2*self.dim)
+        self.V = 0.01 * np.random.randn(self.dim, 2 * self.dim, 2 * self.dim)
+        self.W = 0.01 * np.random.randn(self.dim, 2 * self.dim)
         self.b = 0.01 * np.random.randn(self.dim)
 
         # Softmax parameters
@@ -150,7 +156,7 @@ class RNTN:
         self.dbs = np.empty_like(self.bs)
 
     def cost_and_grad(self, trees, test=False):
-        cost, result = 0.0, np.zeros((5,5))
+        cost, result = 0.0, np.zeros((5, 5))
         self.L, self.V, self.W, self.b, self.Ws, self.bs = self.stack
 
         # Forward propagation
@@ -196,13 +202,14 @@ class RNTN:
 
     def forward_prop(self, tree):
         cost = 0.0
-        result = np.zeros((5,5))
+        result = np.zeros((5, 5))
 
         if tr.isleaf(tree):
             # output = word vector
             try:
                 tree.vector = self.L[:, self.word_map[tree[0]]]
-            except:
+            except Exception as e:
+                print("Exception: {}".format(e))
                 tree.vector = self.L[:, self.word_map[tr.UNK]]
             tree.fprop = True
         else:
@@ -267,15 +274,17 @@ class RNTN:
 
             # Compute error for children
             deltas = np.dot(self.W.T, deltas)
-            deltas += np.tensordot(self.V.transpose((0,2,1)) + self.V, outer.T,
-                                   axes=([1,0], [0,1]))
+            deltas += np.tensordot(self.V.transpose((0, 2, 1)) +
+                                   self.V, outer.T,
+                                   axes=([1, 0], [0, 1]))
 
             self.back_prop(tree[0], deltas[:self.dim])
             self.back_prop(tree[1], deltas[self.dim:])
 
     def update_params(self, scale, update):
-        self.stack[1:] = [P+scale*dP for P, dP in zip(self.stack[1:], update[1:])]
+        self.stack[1:] = [P + scale * dP for P, dP in
+                          zip(self.stack[1:], update[1:])]
         # Update L separately
         dL = update[0]
         for j in dL.keys():
-            self.L[:,j] += scale*dL[j]
+            self.L[:, j] += scale * dL[j]
