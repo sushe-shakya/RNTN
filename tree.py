@@ -8,7 +8,7 @@ import util
 import os
 
 
-UNK = 'UNK'
+UNK = 'unk'
 
 WORD_MAP_FILENAME = 'models/word_map.pickle'
 logger = logging.getLogger(__file__)

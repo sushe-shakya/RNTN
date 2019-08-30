@@ -1,26 +1,11 @@
 #!/bin/env python3
-
 import argparse
 import logging
 import rntn
 import tree as tr
-import os
-import pickle
-
-LOGGING_LEVELS = {'critical': logging.CRITICAL,
-                  'error': logging.ERROR,
-                  'warning': logging.WARNING,
-                  'info': logging.INFO,
-                  'debug': logging.DEBUG}
-
-log_level = os.getenv("LOG_LEVEL", "info")
-logging_level = LOGGING_LEVELS[log_level]
-logging.basicConfig(level=logging_level,
-                    format='%(asctime)s %(levelname)s: %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S')
+import util
 
 DATA_DIR = "trees"
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 logger = logging.getLogger(__file__)
 
 
@@ -64,36 +49,9 @@ def main():
     else:
         # load the trees
         train_trees = tr.load_trees(args.dataset)
-
-        WORD_EMEDDINGS_PATH = f"{BASE_DIR}/trees/{args.dataset}_word_embeddings.pkl"
-        SENTENCE_INDEX_PATH = f"{BASE_DIR}/trees/{args.dataset}_sentence_index.pkl"
-
-        if os.path.exists(WORD_EMEDDINGS_PATH) and \
-                os.path.exists(SENTENCE_INDEX_PATH):
-            logger.info("Loading word embeddings and sentence_index")
-            fd = open(WORD_EMEDDINGS_PATH, 'rb')
-            word_embeddings = pickle.load(fd)
-            fd.close()
-
-            fd = open(SENTENCE_INDEX_PATH, 'rb')
-            sentence_index = pickle.load(fd)
-            fd.close()
-
-            logger.info("Loaded word embeddings and sentence_index")
-
-        else:
-            logger.info("Creating word embeddings and sentence_index")
-            word_embeddings, sentence_index = \
-                tr.setup_word_embeddings(train_trees)
-
-            fd = open(WORD_EMEDDINGS_PATH, 'wb')
-            pickle.dump(word_embeddings, fd)
-            fd.close()
-
-            fd = open(SENTENCE_INDEX_PATH, 'wb')
-            pickle.dump(sentence_index, fd)
-            fd.close()
-            logger.info("Created word embeddings and sentence_index")
+        logger.info("Loading glove word embeddings")
+        word_embeddings = util.get_glove_embeddings(args.dim)
+        logger.info("Loaded glove word embeddings")
 
         # Initialize the model
 
@@ -102,8 +60,7 @@ def main():
             batch_size=args.batch_size, reg=args.reg,
             learning_rate=args.learning_rate, max_epochs=args.epochs,
             optimizer=args.optimizer,
-            word_embeddings=word_embeddings,
-            sentence_index=sentence_index)
+            word_embeddings=word_embeddings)
 
         # Train
         model.fit(train_trees, export_filename=args.model)

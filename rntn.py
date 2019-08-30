@@ -19,7 +19,7 @@ class RNTN:
 
     def __init__(self, dim=10, output_dim=5, batch_size=30, reg=10,
                  learning_rate=1e-2, max_epochs=2, optimizer='adagrad',
-                 word_embeddings=None, sentence_index=None):
+                 word_embeddings=None):
         self.dim = dim
         self.output_dim = output_dim
         self.batch_size = batch_size
@@ -28,7 +28,6 @@ class RNTN:
         self.max_epochs = max_epochs
         self.optimizer_algorithm = optimizer
         self.word_embeddings = word_embeddings
-        self.sentence_index = sentence_index
 
     def fit(self, trees, export_filename='models/RNTN.pickle', verbose=False):
         import sgd
@@ -83,11 +82,12 @@ class RNTN:
         if tr.isleaf(tree):
             # output = word vector
             try:
-                index = self.sentence_index[tr.text_from_tree(tree)]
-                tree.vector = self.L[tree[0]][index]
+                tree.vector = self.L[tree[0]]
             except Exception as e:
                 logger.error("Exception: {}".format(e))
-                # tree.vector = self.L[index][:, self.word_map[tr.UNK]]
+                # tree.vector = self.L[:, self.word_map[tr.UNK]]
+                tree.vector = self.L[tr.UNK]
+
         else:
             # calculate output of child nodes
             self.predict(tree[0])
@@ -144,8 +144,7 @@ class RNTN:
 
         # Forward propagation
         for tree in trees:
-            index = self.sentence_index[tr.text_from_tree(tree)]
-            _cost, _result = self.forward_prop(tree, index)
+            _cost, _result = self.forward_prop(tree)
             cost += _cost
             result += _result
 
@@ -166,8 +165,8 @@ class RNTN:
 
         # Scale cost and gradients by minibatch size
         scale = 1.0 / self.batch_size
-        for v in self.dL.values():
-            v *= scale
+        # for v in self.dL.values():
+        #     v *= scale
 
         # Add L2 reguralization
         cost += 0.5 * self.reg * np.sum(self.V ** 2)
@@ -175,16 +174,20 @@ class RNTN:
         cost += 0.5 * self.reg * np.sum(self.Ws ** 2)
         cost *= scale
 
-        grad = [self.dL,
-                scale * (self.dV + (self.reg * self.V)),
+        # grad = [self.dL,
+        #         scale * (self.dV + (self.reg * self.V)),
+        #         scale * (self.dW + (self.reg * self.W)),
+        #         scale * self.db,
+        #         scale * (self.dWs + (self.reg * self.Ws)),
+        #         scale * self.dbs]
+        grad = [scale * (self.dV + (self.reg * self.V)),
                 scale * (self.dW + (self.reg * self.W)),
                 scale * self.db,
                 scale * (self.dWs + (self.reg * self.Ws)),
                 scale * self.dbs]
-
         return cost, grad
 
-    def forward_prop(self, tree, index):
+    def forward_prop(self, tree):
         cost = 0.0
         result = np.zeros((5, 5))
 
@@ -192,15 +195,15 @@ class RNTN:
             # output = word vector
             try:
                 # index = self.sentence_index[tr.text_from_tree(tree)]
-                tree.vector = self.L[tree[0]][index]
+                tree.vector = self.L[tree[0]]
             except Exception as e:
                 logger.error("Exception: {}".format(e))
-                # tree.vector = self.L[:, self.word_map[tr.UNK]]
+                tree.vector = self.L[tr.UNK]
             tree.fprop = True
         else:
             # calculate output of child nodes
-            lcost, lresult = self.forward_prop(tree[0], index)
-            rcost, rresult = self.forward_prop(tree[1], index)
+            lcost, lresult = self.forward_prop(tree[0])
+            rcost, rresult = self.forward_prop(tree[1])
             cost += lcost + rcost
             result += lresult + rresult
 
@@ -270,6 +273,7 @@ class RNTN:
     def update_params(self, scale, update):
         # self.stack[1:] = [P + scale * dP for P, dP in
         #                   zip(self.stack[1:], update[1:])]4
+
         self.stack[0:] = [P + scale * dP for P, dP in
                           zip(self.stack[0:], update[0:])]
 

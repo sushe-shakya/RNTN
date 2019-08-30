@@ -63,11 +63,18 @@ class SGD:
                 update = grad
             elif self.optimizer == 'adagrad':
                 # trace = trace+grad.^2
-                self.grads[1:] = [gt + g**2 for gt, g in zip(self.grads[1:],
-                                                             grad[1:])]
+
+                # self.grads[1:] = [gt + g**2 for gt, g in zip(self.grads[1:],
+                #                                              grad[1:])]
+                self.grads[0:] = [gt + g**2 for gt, g in zip(self.grads[0:],
+                                                             grad[0:])]
                 # update = grad.*trace.^(-1/2)
+
+                # update = [g * (1. / np.sqrt(gt)) for gt, g in
+                #           zip(self.grads[1:], grad[1:])]
                 update = [g * (1. / np.sqrt(gt)) for gt, g in
-                          zip(self.grads[1:], grad[1:])]
+                          zip(self.grads[0:], grad[0:])]
+
                 # handle dictionary separately
                 # dL = grad[0]
                 # dLt = self.grads[0]
@@ -81,5 +88,8 @@ class SGD:
 
             # Log status
             if self.iter % log_interval == 0:
+                # logger.info("\r   Iter = {} ({}), Cost = {:.4f},Expected = {:.4f}".format(
+                #     it, self.iter, cost, self.expcosts[-1]), end=' ')
+
                 logger.info("\r   Iter = {} ({}), Cost = {:.4f},Expected = {:.4f}".format(
-                    it, self.iter, cost, self.expcosts[-1]), end=' ')
+                    it, self.iter, cost, self.expcosts[-1]))

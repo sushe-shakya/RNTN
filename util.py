@@ -1,11 +1,9 @@
 """
 Utility functions
 """
-from bert_embedding import BertEmbedding
+from settings import BASE_DIR
 import numpy as np
 import pickle
-
-bert_embedding = BertEmbedding()
 
 
 def save_to_file(model, filename):
@@ -23,11 +21,13 @@ def softmax(x):
     return e / sum(e)
 
 
-def get_bert_embeddings(text):
-    tokens, embeddings = bert_embedding([text])[0]
-    token_embeddings_map = {}
-    for i in range(len(tokens)):
-        token_embeddings_map[tokens[i]] = embeddings[i]
-    return token_embeddings_map
-
-    # train_trees = load_trees(dataset='train')
+def get_glove_embeddings(dimension):
+    word_embeddings = {}
+    fd = open(f"{BASE_DIR}/models/glove.6B/glove.6B.{dimension}d.txt", 'r')
+    lines = fd.readlines()
+    for line in lines:
+        tokens = line.strip().split(' ')
+        word = tokens[0]
+        embeddings = np.asarray([float(a) for a in tokens[1:]])
+        word_embeddings[word] = embeddings
+    return word_embeddings
