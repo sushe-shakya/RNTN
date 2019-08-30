@@ -39,7 +39,7 @@ class RNTN:
                                  self.optimizer_algorithm)
         test_trees = tr.load_trees('test')
 
-        with open("log.csv", "a", newline='') as csvfile:
+        with open(f"log_{self.dim}.csv", "a", newline='') as csvfile:
             csvwriter = csv.writer(csvfile)
             fieldnames = ["Timestamp", "Vector size", "Learning rate",
                           "Batch size", "Regularization", "Epoch",
@@ -70,6 +70,7 @@ class RNTN:
                        self.batch_size, self.reg, epoch,
                        train_cost, train_accuracy,
                        test_cost, test_accuracy]
+                print(row)
                 csvwriter.writerow(row)
 
     def test(self, trees):
@@ -84,7 +85,7 @@ class RNTN:
             try:
                 tree.vector = self.L[tree[0]]
             except Exception as e:
-                logger.error("Exception: {}".format(e))
+                # logger.info("Exception: {}".format(e))
                 # tree.vector = self.L[:, self.word_map[tr.UNK]]
                 tree.vector = self.L[tr.UNK]
 
@@ -197,7 +198,7 @@ class RNTN:
                 # index = self.sentence_index[tr.text_from_tree(tree)]
                 tree.vector = self.L[tree[0]]
             except Exception as e:
-                logger.error("Exception: {}".format(e))
+                # logger.info("Exception: {}".format(e))
                 tree.vector = self.L[tr.UNK]
             tree.fprop = True
         else:
