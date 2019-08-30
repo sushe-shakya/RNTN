@@ -122,3 +122,6 @@ ENV/
 #trees
 models
 log.csv
+train_word_embeddings.pkl
+trees/train_sentence_index.pkl
+trees/train_word_embeddings.pkl

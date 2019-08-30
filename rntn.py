@@ -1,22 +1,25 @@
 """
 Implementation of the Recursive Neural Tensor Network (RNTN) model
 """
-
+from datetime import datetime
 import collections
-import csv
+import logging
 import pickle
 import time
-from datetime import datetime
+import csv
 
 import numpy as np
 
 import tree as tr
 
+logger = logging.getLogger(__file__)
+
 
 class RNTN:
 
     def __init__(self, dim=10, output_dim=5, batch_size=30, reg=10,
-                 learning_rate=1e-2, max_epochs=2, optimizer='adagrad'):
+                 learning_rate=1e-2, max_epochs=2, optimizer='adagrad',
+                 word_embeddings=None, sentence_index=None):
         self.dim = dim
         self.output_dim = output_dim
         self.batch_size = batch_size
@@ -24,6 +27,8 @@ class RNTN:
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
         self.optimizer_algorithm = optimizer
+        self.word_embeddings = word_embeddings
+        self.sentence_index = sentence_index
 
     def fit(self, trees, export_filename='models/RNTN.pickle', verbose=False):
         import sgd
@@ -45,11 +50,11 @@ class RNTN:
                 csvwriter.writerow(fieldnames)
 
             for epoch in range(self.max_epochs):
-                print("Running epoch {} ...".format(epoch))
+                logger.info("Running epoch {} ...".format(epoch))
                 start = time.time()
                 self.optimizer.optimize(trees)
                 end = time.time()
-                print("   Time per epoch = {:.4f}".format(end - start))
+                logger.info("   Time per epoch = {:.4f}".format(end - start))
 
                 # Save the model
                 self.save(export_filename)
@@ -78,10 +83,11 @@ class RNTN:
         if tr.isleaf(tree):
             # output = word vector
             try:
-                tree.vector = self.L[:, self.word_map[tree[0]]]
+                index = self.sentence_index[tr.text_from_tree(tree)]
+                tree.vector = self.L[tree[0]][index]
             except Exception as e:
-                print("Exception: {}".format(e))
-                tree.vector = self.L[:, self.word_map[tr.UNK]]
+                logger.error("Exception: {}".format(e))
+                # tree.vector = self.L[index][:, self.word_map[tr.UNK]]
         else:
             # calculate output of child nodes
             self.predict(tree[0])
@@ -90,8 +96,8 @@ class RNTN:
             # compute output
             lr = np.hstack([tree[0].vector, tree[1].vector])
             tree.vector = np.tanh(
-                np.tensordot(self.V, np.outer(lr, lr), axes=([1, 2], [0, 1])) +
-                np.dot(self.W, lr) + self.b)
+                np.tensordot(self.V, np.outer(lr, lr), axes=([1, 2], [0, 1]))
+                + np.dot(self.W, lr) + self.b)
 
         # softmax
         import util
@@ -131,37 +137,15 @@ class RNTN:
             model.word_map = pickle.load(f)
             return model
 
-    def init_params(self):
-        print("Initializing RNTN parameters...")
-
-        # word vectors
-        self.L = 0.01 * np.random.randn(self.dim, self.num_words)
-
-        # RNTN parameters
-        self.V = 0.01 * np.random.randn(self.dim, 2 * self.dim, 2 * self.dim)
-        self.W = 0.01 * np.random.randn(self.dim, 2 * self.dim)
-        self.b = 0.01 * np.random.randn(self.dim)
-
-        # Softmax parameters
-        self.Ws = 0.01 * np.random.randn(self.output_dim, self.dim)
-        self.bs = 0.01 * np.random.randn(self.output_dim)
-
-        self.stack = [self.L, self.V, self.W, self.b, self.Ws, self.bs]
-
-        # Gradients
-        self.dV = np.empty_like(self.V)
-        self.dW = np.empty_like(self.W)
-        self.db = np.empty_like(self.b)
-        self.dWs = np.empty_like(self.Ws)
-        self.dbs = np.empty_like(self.bs)
-
     def cost_and_grad(self, trees, test=False):
         cost, result = 0.0, np.zeros((5, 5))
-        self.L, self.V, self.W, self.b, self.Ws, self.bs = self.stack
+        # self.L, self.V, self.W, self.b, self.Ws, self.bs = self.stack
+        self.V, self.W, self.b, self.Ws, self.bs = self.stack
 
         # Forward propagation
         for tree in trees:
-            _cost, _result = self.forward_prop(tree)
+            index = self.sentence_index[tr.text_from_tree(tree)]
+            _cost, _result = self.forward_prop(tree, index)
             cost += _cost
             result += _result
 
@@ -169,7 +153,7 @@ class RNTN:
             return cost / len(trees), result
 
         # Initialize gradients
-        self.dL = collections.defaultdict(lambda: np.zeros((self.dim,)))
+        # self.dL = collections.defaultdict(lambda: np.zeros((self.dim,)))
         self.dV[:] = 0
         self.dW[:] = 0
         self.db[:] = 0
@@ -200,30 +184,31 @@ class RNTN:
 
         return cost, grad
 
-    def forward_prop(self, tree):
+    def forward_prop(self, tree, index):
         cost = 0.0
         result = np.zeros((5, 5))
 
         if tr.isleaf(tree):
             # output = word vector
             try:
-                tree.vector = self.L[:, self.word_map[tree[0]]]
+                # index = self.sentence_index[tr.text_from_tree(tree)]
+                tree.vector = self.L[tree[0]][index]
             except Exception as e:
-                print("Exception: {}".format(e))
-                tree.vector = self.L[:, self.word_map[tr.UNK]]
+                logger.error("Exception: {}".format(e))
+                # tree.vector = self.L[:, self.word_map[tr.UNK]]
             tree.fprop = True
         else:
             # calculate output of child nodes
-            lcost, lresult = self.forward_prop(tree[0])
-            rcost, rresult = self.forward_prop(tree[1])
+            lcost, lresult = self.forward_prop(tree[0], index)
+            rcost, rresult = self.forward_prop(tree[1], index)
             cost += lcost + rcost
             result += lresult + rresult
 
             # compute output
             lr = np.hstack([tree[0].vector, tree[1].vector])
             tree.vector = np.tanh(
-                np.tensordot(self.V, np.outer(lr, lr), axes=([1, 2], [0, 1])) +
-                np.dot(self.W, lr) + self.b)
+                np.tensordot(self.V, np.outer(lr, lr), axes=([1, 2], [0, 1]))
+                + np.dot(self.W, lr) + self.b)
 
         # softmax
         tree.output = np.dot(self.Ws, tree.vector) + self.bs
@@ -257,12 +242,13 @@ class RNTN:
 
         # leaf node => update word vectors
         if tr.isleaf(tree):
-            try:
-                index = self.word_map[tree[0]]
-            except KeyError:
-                index = self.word_map[tr.UNK]
-            self.dL[index] += deltas
-            return
+            pass
+            # try:
+            #     index = self.word_map[tree[0]]
+            # except KeyError:
+            #     index = self.word_map[tr.UNK]
+            # self.dL[index] += deltas
+            # return
 
         # Hidden gradients
         else:
@@ -274,17 +260,46 @@ class RNTN:
 
             # Compute error for children
             deltas = np.dot(self.W.T, deltas)
-            deltas += np.tensordot(self.V.transpose((0, 2, 1)) +
-                                   self.V, outer.T,
+            deltas += np.tensordot(self.V.transpose((0, 2, 1))
+                                   + self.V, outer.T,
                                    axes=([1, 0], [0, 1]))
 
             self.back_prop(tree[0], deltas[:self.dim])
             self.back_prop(tree[1], deltas[self.dim:])
 
     def update_params(self, scale, update):
-        self.stack[1:] = [P + scale * dP for P, dP in
-                          zip(self.stack[1:], update[1:])]
+        # self.stack[1:] = [P + scale * dP for P, dP in
+        #                   zip(self.stack[1:], update[1:])]4
+        self.stack[0:] = [P + scale * dP for P, dP in
+                          zip(self.stack[0:], update[0:])]
+
         # Update L separately
-        dL = update[0]
-        for j in dL.keys():
-            self.L[:, j] += scale * dL[j]
+        # dL = update[0]
+        # for j in dL.keys():
+        #     self.L[:, j] += scale * dL[j]
+
+    def init_params(self):
+        logger.info("Initializing RNTN parameters...")
+
+        # word vectors
+        # self.L = 0.01 * np.random.randn(self.dim, self.num_words)
+        self.L = self.word_embeddings
+
+        # RNTN parameters
+        self.V = 0.01 * np.random.randn(self.dim, 2 * self.dim, 2 * self.dim)
+        self.W = 0.01 * np.random.randn(self.dim, 2 * self.dim)
+        self.b = 0.01 * np.random.randn(self.dim)
+
+        # Softmax parameters
+        self.Ws = 0.01 * np.random.randn(self.output_dim, self.dim)
+        self.bs = 0.01 * np.random.randn(self.output_dim)
+
+        # self.stack = [self.L, self.V, self.W, self.b, self.Ws, self.bs]
+        self.stack = [self.V, self.W, self.b, self.Ws, self.bs]
+
+        # Gradients
+        self.dV = np.empty_like(self.V)
+        self.dW = np.empty_like(self.W)
+        self.db = np.empty_like(self.b)
+        self.dWs = np.empty_like(self.Ws)
+        self.dbs = np.empty_like(self.bs)

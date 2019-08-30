@@ -1,16 +1,17 @@
 #!/bin/env python3
 
-import os
-from collections import defaultdict
-
 from nltk.parse import CoreNLPParser
 from nltk.tree import ParentedTree
-
+from collections import defaultdict
+import logging
 import util
+import os
+
 
 UNK = 'UNK'
 
 WORD_MAP_FILENAME = 'models/word_map.pickle'
+logger = logging.getLogger(__file__)
 
 
 def parse(text):
@@ -28,7 +29,7 @@ def isleaf(tree):
     return isinstance(tree, ParentedTree) and tree.height() == 2
 
 
-def traverse(tree, f=print, args=None, leaves=False):
+def traverse(tree, f=logger.info, args=None, leaves=False):
     if leaves:
         if isleaf(tree):
             f(tree, args)
@@ -42,11 +43,11 @@ def traverse(tree, f=print, args=None, leaves=False):
 
 
 def build_word_map():
-    print("Building word map...")
+    logger.info("Building word map...")
     with open("trees/train.txt", "r") as f:
         trees = [ParentedTree.fromstring(line.lower()) for line in f]
 
-    print("Counting words...")
+    logger.info("Counting words...")
     words = defaultdict(int)
     for tree in trees:
         for token in tree.leaves():
@@ -61,16 +62,48 @@ def build_word_map():
 def load_word_map():
     if not os.path.isfile(WORD_MAP_FILENAME):
         return build_word_map()
-    print("Loading word map...")
+    logger.info("Loading word map...")
     return util.load_from_file(WORD_MAP_FILENAME)
 
 
 def load_trees(dataset='train'):
     filename = "trees/{}.txt".format(dataset)
     with open(filename, 'r') as f:
-        print("Reading '{}'...".format(filename))
+        logger.info("Reading '{}'...".format(filename))
         trees = [ParentedTree.fromstring(line.lower()) for line in f]
     return trees
+
+
+def text_from_tree(tree, text=""):
+
+    if isleaf(tree):
+        token = str(tree).split(" ")[1].strip()[:-1]
+        text = text + token + " "
+        return text
+
+    for child in tree:
+        text = text_from_tree(child, text)
+
+    return text
+
+
+def setup_word_embeddings(trees):
+    """Get embeddings for "hello" of
+       sentence 10: word_embeddings["hello"][10]"""
+    sentence_index = {}
+    word_embeddings = {}
+    for i, tree in enumerate(trees):
+        text = text_from_tree(tree)
+        sentence_index[text] = i
+        sentence_token_embeddings = util.get_bert_embeddings(text)
+        for token, embeddings in sentence_token_embeddings.items():
+            if token not in word_embeddings:
+                word_embeddings[token] = {}
+                word_embeddings[token][i] = embeddings
+            else:
+                word_embeddings[token][i] = embeddings
+        logger.info("Word embeddings setup completed for: {}".format(i))
+    return word_embeddings, sentence_index
 
 
 if __name__ == '__main__':

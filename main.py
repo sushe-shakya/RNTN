@@ -1,11 +1,27 @@
 #!/bin/env python3
 
 import argparse
-
+import logging
 import rntn
 import tree as tr
+import os
+import pickle
+
+LOGGING_LEVELS = {'critical': logging.CRITICAL,
+                  'error': logging.ERROR,
+                  'warning': logging.WARNING,
+                  'info': logging.INFO,
+                  'debug': logging.DEBUG}
+
+log_level = os.getenv("LOG_LEVEL", "info")
+logging_level = LOGGING_LEVELS[log_level]
+logging.basicConfig(level=logging_level,
+                    format='%(asctime)s %(levelname)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S')
 
 DATA_DIR = "trees"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+logger = logging.getLogger(__file__)
 
 
 def main():
@@ -29,7 +45,8 @@ def main():
                         help="Regularization parameter")
     parser.add_argument("-t", "--test", action="store_true",
                         help="Test a model")
-    parser.add_argument("-m", "--model", type=str, default='models/RNTN.pickle',
+    parser.add_argument("-m", "--model", type=str,
+                        default='models/RNTN.pickle',
                         help="Model file")
     parser.add_argument("-o", "--optimizer", type=str, default='adagrad',
                         help="Optimizer", choices=['sgd', 'adagrad'])
@@ -37,22 +54,58 @@ def main():
 
     # Test
     if args.test:
-        print("Testing...")
+        logger.info("Testing...")
         model = rntn.RNTN.load(args.model)
         test_trees = tr.load_trees(args.dataset)
         cost, result = model.test(test_trees)
         accuracy = 100.0 * result.trace() / result.sum()
-        print("Cost = {:.2f}, Correct = {:.0f} / {:.0f}, Accuracy = {:.2f} %".format(
+        logger.info("Cost = {:.2f}, Correct = {:.0f} / {:.0f}, Accuracy = {:.2f} %".format(
             cost, result.trace(), result.sum(), accuracy))
     else:
+        # load the trees
+        train_trees = tr.load_trees(args.dataset)
+
+        WORD_EMEDDINGS_PATH = f"{BASE_DIR}/trees/{args.dataset}_word_embeddings.pkl"
+        SENTENCE_INDEX_PATH = f"{BASE_DIR}/trees/{args.dataset}_sentence_index.pkl"
+
+        if os.path.exists(WORD_EMEDDINGS_PATH) and \
+                os.path.exists(SENTENCE_INDEX_PATH):
+            logger.info("Loading word embeddings and sentence_index")
+            fd = open(WORD_EMEDDINGS_PATH, 'rb')
+            word_embeddings = pickle.load(fd)
+            fd.close()
+
+            fd = open(SENTENCE_INDEX_PATH, 'rb')
+            sentence_index = pickle.load(fd)
+            fd.close()
+
+            logger.info("Loaded word embeddings and sentence_index")
+
+        else:
+            logger.info("Creating word embeddings and sentence_index")
+            word_embeddings, sentence_index = \
+                tr.setup_word_embeddings(train_trees)
+
+            fd = open(WORD_EMEDDINGS_PATH, 'wb')
+            pickle.dump(word_embeddings, fd)
+            fd.close()
+
+            fd = open(SENTENCE_INDEX_PATH, 'wb')
+            pickle.dump(sentence_index, fd)
+            fd.close()
+            logger.info("Created word embeddings and sentence_index")
+
         # Initialize the model
+
         model = rntn.RNTN(
-            dim=args.dim, output_dim=args.output_dim, batch_size=args.batch_size,
-            reg=args.reg, learning_rate=args.learning_rate, max_epochs=args.epochs,
-            optimizer=args.optimizer)
+            dim=args.dim, output_dim=args.output_dim,
+            batch_size=args.batch_size, reg=args.reg,
+            learning_rate=args.learning_rate, max_epochs=args.epochs,
+            optimizer=args.optimizer,
+            word_embeddings=word_embeddings,
+            sentence_index=sentence_index)
 
         # Train
-        train_trees = tr.load_trees(args.dataset)
         model.fit(train_trees, export_filename=args.model)
 
 
